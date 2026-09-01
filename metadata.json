@@ -1,0 +1,6 @@
+{
+  "name": "Component Registry & Sandbox Portal",
+  "description": "A production-grade component registry and interactive sandbox portal with Monaco code inspector, live execution environment, and Second Brain orchestration.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

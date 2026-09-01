@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # 1. Main Second Brain Component Hub & Registry API
+  # ============================================================================
+  second-brain-hub:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: second-brain-registry-hub
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://brain_user:brain_secure_pass@pgvector-db:5432/second_brain
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - API_GATEWAY_SECRET=${API_GATEWAY_SECRET:-sb_sec_prod_99482}
+      - REGISTRY_PUBLIC_URL=http://localhost:3000
+    depends_on:
+      pgvector-db:
+        condition: service_healthy
+      redis-broker:
+        condition: service_started
+    networks:
+      - second-brain-mesh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ============================================================================
+  # 2. PostgreSQL 16 with pgvector Extension (Vector Search & Telemetry)
+  # ============================================================================
+  pgvector-db:
+    image: pgvector/pgvector:pg16
+    container_name: second-brain-pgvector
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=second_brain
+      - POSTGRES_USER=brain_user
+      - POSTGRES_PASSWORD=brain_secure_pass
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    networks:
+      - second-brain-mesh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U brain_user -d second_brain"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # 3. Redis Broker for Realtime WebSocket Telemetry & Event Queue
+  # ============================================================================
+  redis-broker:
+    image: redis:7-alpine
+    container_name: second-brain-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - second-brain-mesh
+
+  # ============================================================================
+  # 4. Ephemeral Sandbox Execution Runner Bridge (Vitest / CLI tests)
+  # ============================================================================
+  ephemeral-sandbox-runner:
+    image: node:20-alpine
+    container_name: second-brain-sandbox-runner
+    restart: unless-stopped
+    command: ["sh", "-c", "echo 'Sandbox Runner Active on Socket /tmp/runner.sock' && tail -f /dev/null"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - second-brain-mesh
+
+networks:
+  second-brain-mesh:
+    driver: bridge
+
+volumes:
+  pgvector_data:
+  redis_data:
